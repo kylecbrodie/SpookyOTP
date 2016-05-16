@@ -45,7 +45,7 @@ class OTPBase(object):
         raise NotImplementedError()
 
     def _setup(self, secret, issuer, account,
-               n_digits, algorithm):
+               n_digits, algorithm, min_uri):
         """
         Store the secret and other parameters needed
         to generate OTP codes
@@ -59,6 +59,7 @@ class OTPBase(object):
         self._n_digits = int(n_digits)
         self._algorithm_name = algorithm.lower()
         self._algorithm = self._get_algorithm(self._algorithm_name)
+        self._min_uri = min_uri
 
     @staticmethod
     def _get_algorithm(algorithm_name):
@@ -90,7 +91,7 @@ class OTPBase(object):
 
     @classmethod
     def _get_uri(cls, secret, issuer, account,
-                 n_digits, algorithm, **other_params):
+                 n_digits, algorithm, min_uri, **other_params):
         """
         Return a URL that encodes the OTP parameters so they can
         be loaded onto a phone (or the like) via a QR code.
@@ -100,18 +101,22 @@ class OTPBase(object):
         encoded_otp_type = quote(cls._otp_type)
         encoded_secret = base64.b32encode(secret).decode()
         encoded_issuer = quote(issuer)
-        encoded_account = quote(account)
+        encoded_account = quote(account) if account else None
+        encoded_otp_account = encoded_issuer + ":" + encoded_account if encoded_account else encoded_issuer
         encoded_algorithm = quote(algorithm)
 
-        uri = ("otpauth://{0}/{1}:{2}?secret={3}&issuer={1}"
-               "&digits={4}&algorithm={5}"
-               .format(encoded_otp_type, encoded_issuer, encoded_account,
-                       encoded_secret, n_digits, algorithm))
-        for key, value in other_params.items():
-            if key not in cls._extra_uri_parameters:
-                raise ValueError("Got unexpected URL keyword '{}'"
-                                 .format(key))
-            uri += '&{0}={1}'.format(key, quote(str(value)))
+        uri = None
+
+        if not min_uri:
+            uri = "otpauth://{0}/{1}?secret={2}&issuer={3}&digits={4}&algorithm={5}".format(encoded_otp_type, encoded_otp_account, encoded_secret, encoded_issuer, n_digits, encoded_algorithm)
+            for key, value in other_params.items():
+                if key not in cls._extra_uri_parameters:
+                    raise ValueError("Got unexpected URL keyword '{}'"
+                                     .format(key))
+                uri += '&{0}={1}'.format(key, quote(str(value)))
+        else:
+            uri = "otpauth://{0}/{1}?secret={2}&issuer={3}".format(encoded_otp_type, encoded_otp_account, encoded_secret, encoded_issuer)
+
         return uri
 
     @staticmethod
@@ -148,8 +153,8 @@ class TOTP(OTPBase):
     _otp_type = 'totp'
     _extra_uri_parameters = frozenset(['period'])
 
-    def __init__(self, secret, issuer, account,
-                 n_digits=6, algorithm='sha1', period=30,
+    def __init__(self, secret, issuer, account=None,
+                 n_digits=6, algorithm='sha1', min_uri=False, period=30,
                  time_source=None):
         """
         Generates TOTP (time-based) codes.
@@ -158,18 +163,19 @@ class TOTP(OTPBase):
           secret (bytearray or str): The shared secret used to generate
                                      codes. If str, must be base32 encoded.
           issuer (str): The issuer who provides or manages the account
-          account (str): A label for the account that uses the OTP
+          account (str, optional): A label for the account that uses the OTP
           n_digits (int, optional): The number of digits each code
                                     uses (default: 6)
           algorithm (str, optional): The hashing algorithm to use when
                                      generating the OTP code (default: 'sha1')
+          min_uri (bool, optional): The URI will contain only required parameters
           period (int, optional): How long each code is valid for, in seconds
                                   (default: 30)
           time_source(function, optional): A function that returns an integer
                                            timestamp (default: time.time)
         """
         self._setup(secret, issuer, account,
-                    n_digits, algorithm)
+                    n_digits, algorithm, min_uri)
         self._period = int(period)
         self._current_timestamp = time_source or time.time
 
@@ -182,7 +188,7 @@ class TOTP(OTPBase):
         """
         return self._get_uri(self._secret, self._issuer,
                              self._account, self._n_digits,
-                             self._algorithm_name, period=self._period)
+                             self._algorithm_name, self._min_uri, period=self._period)
 
     def get_otp(self, timestamp=None):
         """
@@ -228,8 +234,8 @@ class HOTP(OTPBase):
     _otp_type = 'hotp'
     _extra_uri_parameters = frozenset(['counter'])
 
-    def __init__(self, secret, issuer, account,
-                 n_digits=6, algorithm='sha1', counter=0):
+    def __init__(self, secret, issuer, account=None,
+                 n_digits=6, algorithm='sha1', min_uri=False, counter=0):
         """
         Generates HOTP (incrementing counter-based) codes.
 
@@ -237,15 +243,16 @@ class HOTP(OTPBase):
           secret (bytearray or str): The shared secret used to generate
                                      codes. If str, must be base32 encoded.
           issuer (str): The issuer who provides or manages the account
-          account (str): A label for the account that uses the OTP
+          account (str, optional): A label for the account that uses the OTP
           n_digits (int, optional): The number of digits each code
                                     uses (default: 6)
           algorithm (str, optional): The hashing algorithm to use when
                                      generating the OTP code (default: 'sha1')
+          min_uri (bool, optional): The URI will contain only required parameters
           counter (int, optional): The initial counter value (default: 0)
         """
         self._setup(secret, issuer, account,
-                    n_digits, algorithm)
+                    n_digits, algorithm, min_uri)
         self.counter = int(counter)
 
     def get_uri(self):
@@ -257,7 +264,7 @@ class HOTP(OTPBase):
         """
         return self._get_uri(self._secret, self._issuer,
                              self._account, self._n_digits,
-                             self._algorithm_name, counter=self.counter)
+                             self._algorithm_name, self._min_uri, counter=self.counter)
 
     def get_otp(self, counter=None, auto_increment=True):
         """
