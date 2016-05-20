@@ -14,6 +14,7 @@ import hmac
 import hashlib
 from spookyotp.byte_util import (int_to_bytearray,
                                  bytes_to_31_bit_int)
+from inspect import (ismethod, isfunction)
 
 
 def get_random_secret(n_bytes=10):
@@ -39,6 +40,7 @@ class OTPBase(object):
     """
     _otp_type = 'otp'
     _extra_uri_parameters = frozenset()
+    _all_parameters = dict()
 
     def __init__(self):
         raise NotImplementedError()
@@ -58,6 +60,29 @@ class OTPBase(object):
         self._n_digits = int(n_digits)
         self._algorithm_name = algorithm.lower()
         self._algorithm = self._get_algorithm(self._algorithm_name)
+        # Populate _all_parameters through reflection so
+        # subclass fields will be picked up as well.
+        # Assumes the field begins with an underscore and
+        # that its URI parameter is the same name without
+        # the underscore.
+        attrs = filter(lambda attr: len(attr) >= 2 and
+                                    attr[0] == "_" and
+                                    attr[1] != "_" and
+                                not ismethod(getattr(self, attr)) and
+                                not isfunction(getattr(self, attr))
+                       , dir(self))
+        attrs = filter(lambda f: f not in {"_algorithm", "_otp_type", "_extra_uri_parameters", "_all_parameters"}, attrs)
+        # Removes the underscore prefix
+        params = map(lambda f: f[1:], attrs)
+        # Fix up two parameters whose variable names
+        # differ from their URI parameter names
+        i = params.index("n_digits")
+        if i != -1:
+            params[i] = "digits"
+        i = params.index("algorithm_name")
+        if i != -1:
+            params[i] = "algorithm"
+        self.__class__._all_parameters = dict(zip(params, attrs))
 
     @staticmethod
     def _get_algorithm(algorithm_name):
@@ -88,40 +113,29 @@ class OTPBase(object):
         qr_code.save(filename)
 
     @classmethod
-    def _get_uri(cls, secret, issuer, account=None,
-                 n_digits=None, algorithm=None, uri_params=None, **other_params):
+    def _get_uri(cls, **kwargs):
         """
         Return a URL that encodes the OTP parameters so they can
         be loaded onto a phone (or the like) via a QR code.
 
         Complies with the google-authenticator KeyUriFormat
         """
-        keys = ["secret", "issuer", "digits", "algorithm"]
-        other_params_values = []
-        for k, v in other_params.items():
-            if k not in cls._extra_uri_parameters:
-                raise ValueError("Got unexpected URI parameter '{}'".format(k))
-            keys.append(k)
-            other_params_values.append(v)
-
-        encoded_secret = base64.b32encode(secret).decode()
-        values = [encoded_secret, issuer, n_digits, algorithm] + other_params_values
-        values = map(lambda x: quote(str(x)), values)
-        params = dict(zip(keys, values))
-
+        issuer = kwargs["issuer"]
+        account = kwargs.get("account")
+        if account:
+            del kwargs["account"]
         encoded_otp_type = quote(cls._otp_type)
         encoded_otp_account = quote(issuer) + ":" + quote(account) if account else quote(issuer)
-        uri = "otpauth://{0}/{1}?".format(encoded_otp_type, encoded_otp_account)
+        uri = "otpauth://{0}/{1}".format(encoded_otp_type, encoded_otp_account)
 
-        if uri_params:
-            uri_params = set(uri_params)
-            uri_params.add("secret")
-            params = {k : v for k, v in params.items() if k in uri_params}
-
-        for k, v in params.items():
-            uri += "{0}={1}&".format(k, v)
-
-        uri = uri[:-1]
+        first = True
+        for k, v in kwargs.items():
+            if v:
+                if not first:
+                    uri += "&{0}={1}".format(k, quote(str(v)))
+                else:
+                    uri += "?{0}={1}".format(k, quote(str(v)))
+                    first = False
 
         return uri
 
@@ -179,9 +193,9 @@ class TOTP(OTPBase):
           time_source(function, optional): A function that returns an integer
                                            timestamp (default: time.time)
         """
+        self._period = int(period)
         self._setup(secret, issuer, account,
                     n_digits, algorithm)
-        self._period = int(period)
         self._current_timestamp = time_source or time.time
 
     def get_uri(self, uri_params=None):
@@ -191,9 +205,11 @@ class TOTP(OTPBase):
 
         Complies with the google-authenticator KeyUriFormat
         """
-        return self._get_uri(self._secret, self._issuer,
-                             self._account, self._n_digits,
-                             self._algorithm_name, uri_params, period=self._period)
+        params = {"secret" : self._secret, "issuer" : self._issuer}
+        for (param, attr) in self._all_parameters.items():
+            if uri_params is None or param in uri_params:
+                params[param] = getattr(self, attr)
+        return self._get_uri(**params)
 
     def get_otp(self, timestamp=None):
         """
@@ -257,6 +273,7 @@ class HOTP(OTPBase):
         self._setup(secret, issuer, account,
                     n_digits, algorithm)
         self.counter = int(counter)
+        self.__class__._all_parameters["counter"] = "counter"
 
     def get_uri(self, uri_params=None):
         """
@@ -265,9 +282,11 @@ class HOTP(OTPBase):
 
         Complies with the google-authenticator KeyUriFormat
         """
-        return self._get_uri(self._secret, self._issuer,
-                             self._account, self._n_digits,
-                             self._algorithm_name, uri_params, counter=self.counter)
+        params = {"secret" : self._secret, "issuer" : self._issuer}
+        for (param, attr) in self._all_parameters.items():
+            if uri_params is None or param in uri_params:
+                params[param] = getattr(self, attr)
+        return self._get_uri(**params)
 
     def get_otp(self, counter=None, auto_increment=True):
         """
