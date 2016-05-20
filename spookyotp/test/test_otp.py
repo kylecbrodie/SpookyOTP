@@ -69,7 +69,7 @@ class TestOTPBase(unittest.TestCase):
         n_digits = 7
         algorithm = 'sha256'
 
-        uri = OTPBase._get_uri(secret, issuer, account, n_digits, algorithm)
+        uri = OTPBase._get_uri(secret=secret, issuer=issuer, account=account, digits=n_digits, algorithm=algorithm)
         self.assertEqual(uri[:10], "otpauth://")
 
         protocol, rest = uri[10:].split('/', 1)
@@ -155,9 +155,9 @@ class CommonOTPTests(object):
         """
         mock_get_uri.return_value = 'otpauth://TEST_URL'
         uri = self.otp.get_uri()
-        mock_get_uri.assert_called_once_with(self.secret, self.issuer,
-                                             self.account, self.n_digits,
-                                             self.algorithm, None,
+        mock_get_uri.assert_called_once_with(secret=self.secret, issuer=self.issuer,
+                                             account=self.account, digits=self.n_digits,
+                                             algorithm=self.algorithm,
                                              **self.other_uri_params)
         self.assertEqual(uri, 'otpauth://TEST_URL')
 
