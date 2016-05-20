@@ -124,18 +124,16 @@ class OTPBase(object):
         account = kwargs.get("account")
         if account:
             del kwargs["account"]
+        secret = kwargs["secret"]
+        del kwargs["secret"]
+        encoded_secret = base64.b32encode(secret).decode()
         encoded_otp_type = quote(cls._otp_type)
         encoded_otp_account = quote(issuer) + ":" + quote(account) if account else quote(issuer)
-        uri = "otpauth://{0}/{1}".format(encoded_otp_type, encoded_otp_account)
+        uri = "otpauth://{0}/{1}?secret={2}".format(encoded_otp_type, encoded_otp_account, encoded_secret)
 
-        first = True
         for k, v in kwargs.items():
             if v:
-                if not first:
-                    uri += "&{0}={1}".format(k, quote(str(v)))
-                else:
-                    uri += "?{0}={1}".format(k, quote(str(v)))
-                    first = False
+                uri += "&{0}={1}".format(k, quote(str(v)))
 
         return uri
 
