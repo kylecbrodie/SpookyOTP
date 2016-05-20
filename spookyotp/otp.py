@@ -71,9 +71,10 @@ class OTPBase(object):
                                 not ismethod(getattr(self, attr)) and
                                 not isfunction(getattr(self, attr))
                        , dir(self))
-        attrs = filter(lambda f: f not in {"_algorithm", "_otp_type", "_extra_uri_parameters", "_all_parameters"}, attrs)
+        # Filter out variables that aren't URI parameters
+        attrs = filter(lambda a: a not in {"_algorithm", "_otp_type", "_extra_uri_parameters", "_all_parameters"}, attrs)
         # Removes the underscore prefix
-        params = map(lambda f: f[1:], attrs)
+        params = list(map(lambda a: a[1:], attrs))
         # Fix up two parameters whose variable names
         # differ from their URI parameter names
         i = params.index("n_digits")
