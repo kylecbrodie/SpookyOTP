@@ -12,7 +12,6 @@ except ImportError:
 import time
 import hmac
 import hashlib
-import sys
 from spookyotp.byte_util import (int_to_bytearray,
                                  bytes_to_31_bit_int)
 
@@ -231,7 +230,6 @@ class TOTP(OTPBase):
                        for i in range(-max_step_difference,
                                       max_step_difference + 1)]
         return any([self._compare(code, valid) for valid in valid_codes])
-
 
 
 class HOTP(OTPBase):
