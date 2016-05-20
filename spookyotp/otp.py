@@ -96,7 +96,7 @@ class OTPBase(object):
 
         Complies with the google-authenticator KeyUriFormat
         """
-        keys = ["secret", "issuer", "n_digits", "algorithm"]
+        keys = ["secret", "issuer", "digits", "algorithm"]
         for k in other_params.keys():
             if k not in cls._extra_uri_parameters:
                 raise ValueError("Got unexpected URI parameter '{}'".format(k))

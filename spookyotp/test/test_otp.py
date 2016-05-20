@@ -130,7 +130,7 @@ class CommonOTPTests(object):
         """
         Test getting a QR code for the OTP generator
         """
-        self.otp.get_uri = lambda: "otp://otp/TEST_URL"
+        self.otp.get_uri = lambda uri_params=None: "otp://otp/TEST_URL"
         mock_img = mock.Mock()
         mock_make.return_value = mock_img
 
@@ -143,7 +143,7 @@ class CommonOTPTests(object):
         Test saving a QR code to a file for the OTP generator
         """
         mock_code = mock.Mock()
-        self.otp.get_qr_code = lambda: mock_code
+        self.otp.get_qr_code = lambda uri_params=None: mock_code
 
         self.otp.save_qr_code('test.png')
         mock_code.save.assert_called_once_with('test.png')
@@ -157,7 +157,7 @@ class CommonOTPTests(object):
         uri = self.otp.get_uri()
         mock_get_uri.assert_called_once_with(self.secret, self.issuer,
                                              self.account, self.n_digits,
-                                             self.algorithm,
+                                             self.algorithm, None,
                                              **self.other_uri_params)
         self.assertEqual(uri, 'otpauth://TEST_URL')
 
